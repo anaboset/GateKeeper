@@ -13,9 +13,10 @@ In the past week alone, multiple high-value asset (PCs) have been stolen from st
 **GateKeeper** is a zero-cost, cloud-based verification ecosystem that shifts the power of security to the student’s smartphone. It replaces easily faked paper IDs with a **dynamic, time-sensitive Digital Exit Pass**.
 
 ### Key Features
-* **Scan-to-Exit:** Students scan a QR code at the gate to generate a live pass.
+* **Admin-Controlled Registration:** Only the admin account can register/update student devices.
+* **Scan-to-Exit:** Students generate a signed 5-minute pass link and guards open `/verify` directly.
 * **Visual Verification:** Displays the student's photo and the device's **Serial Number** in high-contrast, large fonts for easy guard inspection.
-* **Anti-Fraud Logic:** Includes a live ticking clock and "Daily Secret Colors" to prevent the use of static screenshots.
+* **Anti-Fraud Logic:** Includes a live ticking clock with strict 5-minute pass expiry.
 * **The Kill-Switch:** Students can mark a device as "Stolen" in the app. If that device is scanned at any gate, the screen flashes a high-visibility alarm to alert the guard immediately.
 
 ![Stolen Status](https://img.shields.io/badge/STOLEN_ALARM-ACTIVE-red?style=for-the-badge&logo=opsgenie)
@@ -31,15 +32,15 @@ In the past week alone, multiple high-value asset (PCs) have been stolen from st
 ---
 
 ## 📋 System Architecture
-1.  **Registration:** Student logs in via University Email and registers their laptop's Model, Serial Number, and a Profile Photo.
+1.  **Registration:** Admin registers student laptop details and profile photo.
 2.  **The Gate Process:**
-    * Student arrives at the gate and scans a static QR code.
-    * The app validates the session and fetches the device data.
-    * The app displays the **Verification Pass**.
+    * Student logs in, generates a 5-minute signed pass URL, and shows/uses it as QR.
+    * Guard opens the dedicated `pages/verify.py` route with tokenized query params.
+    * App validates token + pass expiry + stolen status and displays the **Verification Pass**.
 3.  **The Guard Check:** The guard performs a 3-point check:
     * Does the photo match the student?
     * Does the Serial Number on the screen match the laptop sticker?
-    * Is the "Daily Color" correct?
+    * Is the live clock moving and pass not expired?
 
 ---
 
@@ -68,16 +69,22 @@ streamlit run streamlit_app.py
 ### 3. Environment Variables
 Create a `.env` file or add to Streamlit Secrets:
 ```env
-SUPABASE_URL = "your_supabase_url"
-SUPABASE_KEY = "your_supabase_anon_key"
+SUPABASE_URL = "https://<project>.supabase.co"
+SUPABASE_ANON_KEY = "<anon-key>"
+SUPABASE_SERVICE_ROLE_KEY = "<service-role-key>"
+ADMIN_EMAIL = "admin@campus.edu"
+APP_BASE_URL = "http://localhost:8501"
+PASS_SIGNING_SECRET = "long-random-secret"
 ```
 
 ---
 
 ## 🛡️ Security Pro-Tips Implemented
-* **Session Fingerprinting:** Logs the IP and Browser type during pass generation to prevent account sharing.
-* **Time-To-Live (TTL):** Passes expire automatically after 5 minutes to ensure the student is actually at the gate.
-* **High-Visibility Stolen State:** Uses CSS animations to turn the phone into a flashing beacon if a stolen serial is detected.
+* **No Public Signup:** Accounts are pre-created by admin in Supabase Auth.
+* **Time-To-Live (TTL):** Passes expire automatically after 5 minutes.
+* **Signed Verify URL:** Guard page token is HMAC-signed and time-bound.
+* **DB Update Guard:** Students are blocked at trigger level from editing profile/device identity fields.
+* **High-Visibility Stolen State:** CSS flashing red alarm if device is flagged stolen.
 
 ---
 

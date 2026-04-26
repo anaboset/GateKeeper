@@ -1,5 +1,6 @@
 -- Campus Device Security System schema for Supabase
 -- Run this in Supabase SQL Editor.
+-- Replace admin@campus.edu below with your real admin login email.
 
 -- Ensure UUID generation is available
 create extension if not exists pgcrypto;
@@ -26,16 +27,6 @@ create index if not exists idx_student_devices_serial_number
 create index if not exists idx_student_devices_user_id
   on public.student_devices(user_id);
 
-create table if not exists public.security_config (
-  key text primary key,
-  value text not null,
-  updated_at timestamptz not null default now()
-);
-
-insert into public.security_config(key, value)
-values ('daily_secret_color', 'BLUE')
-on conflict (key) do nothing;
-
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -46,21 +37,53 @@ begin
 end;
 $$;
 
+create or replace function public.enforce_student_update_scope()
+returns trigger
+language plpgsql
+as $$
+declare
+  is_admin boolean := lower(coalesce(auth.jwt() ->> 'email', '')) = 'admin@campus.edu';
+begin
+  -- Admin can update any field.
+  if is_admin then
+    return new;
+  end if;
+
+  -- Non-admin authenticated users can only update their own pass/stolen state.
+  if auth.uid() is null or auth.uid() <> old.user_id then
+    raise exception 'Not allowed to update this device record';
+  end if;
+
+  if new.user_id is distinct from old.user_id
+     or new.full_name is distinct from old.full_name
+     or new.department is distinct from old.department
+     or new.student_id is distinct from old.student_id
+     or new.laptop_brand is distinct from old.laptop_brand
+     or new.serial_number is distinct from old.serial_number
+     or new.profile_image_path is distinct from old.profile_image_path
+     or new.created_at is distinct from old.created_at
+     or new.id is distinct from old.id then
+    raise exception 'Students can only update pass status or stolen status';
+  end if;
+
+  return new;
+end;
+$$;
+
 drop trigger if exists trg_student_devices_updated_at on public.student_devices;
 create trigger trg_student_devices_updated_at
 before update on public.student_devices
 for each row execute function public.set_updated_at();
 
-drop trigger if exists trg_security_config_updated_at on public.security_config;
-create trigger trg_security_config_updated_at
-before update on public.security_config
-for each row execute function public.set_updated_at();
+drop trigger if exists trg_student_devices_update_scope on public.student_devices;
+create trigger trg_student_devices_update_scope
+before update on public.student_devices
+for each row execute function public.enforce_student_update_scope();
 
 -- Row Level Security
 alter table public.student_devices enable row level security;
-alter table public.security_config enable row level security;
 
--- Students can read/write only their own device record
+-- Students can only read their own records
 drop policy if exists "students_select_own_device" on public.student_devices;
 create policy "students_select_own_device"
 on public.student_devices
@@ -68,30 +91,32 @@ for select
 to authenticated
 using (auth.uid() = user_id);
 
-drop policy if exists "students_insert_own_device" on public.student_devices;
-create policy "students_insert_own_device"
+-- Admin-only registration (insert)
+drop policy if exists "admin_insert_devices" on public.student_devices;
+create policy "admin_insert_devices"
 on public.student_devices
 for insert
 to authenticated
-with check (auth.uid() = user_id);
+with check (lower(auth.jwt() ->> 'email') = 'admin@campus.edu');
 
-drop policy if exists "students_update_own_device" on public.student_devices;
-create policy "students_update_own_device"
+-- Admin can update any device profile fields
+drop policy if exists "admin_update_devices" on public.student_devices;
+create policy "admin_update_devices"
+on public.student_devices
+for update
+to authenticated
+using (lower(auth.jwt() ->> 'email') = 'admin@campus.edu')
+with check (lower(auth.jwt() ->> 'email') = 'admin@campus.edu');
+
+-- Students can update only their own pass/stolen status.
+-- Profile fields are also protected by enforce_student_update_scope trigger.
+drop policy if exists "students_update_pass_or_stolen" on public.student_devices;
+create policy "students_update_pass_or_stolen"
 on public.student_devices
 for update
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
-
--- Anyone authenticated can read secret color for guard verification
-drop policy if exists "authenticated_read_security_config" on public.security_config;
-create policy "authenticated_read_security_config"
-on public.security_config
-for select
-to authenticated
-using (true);
-
--- Optional: only service role should update security_config (no update policy for authenticated users)
 
 -- Storage bucket for profile images
 insert into storage.buckets (id, name, public)
