@@ -10,6 +10,7 @@ from app_core import (
     get_anon_client,
     get_device_record_by_user_id,
     get_public_photo_url,
+    get_service_client,
     init_state,
     inject_css,
     is_admin,
@@ -41,8 +42,7 @@ def render_auth() -> None:
 def render_admin_registration() -> None:
     st.subheader("Admin: Register / Update Student Device")
     st.info("Create student login credentials in Supabase Auth first, then register their device here.")
-    service_client = get_anon_client()
-    service_client = authenticated_client(service_client)
+    service_client = get_service_client()
 
     with st.form("admin_registration_form"):
         student_user_id = st.text_input("Student Auth User ID (UUID)")
