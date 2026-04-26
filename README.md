@@ -16,7 +16,7 @@ GateKeeper converts the gate workflow into a digital, time-aware, logged verific
 
 ## 📱 Live App Link
 
-- Production URL: [https://keepstudent.streamlit.app](https://your-app-url.streamlit.app)
+- Production URL: [https://keepstudent.streamlit.app/](https://your-app-url.streamlit.app)
 - Gate QR should point to this single URL (static QR, student-scans-gate model).
 
 ---
@@ -29,7 +29,7 @@ GateKeeper converts the gate workflow into a digital, time-aware, logged verific
 
 ## 📊 Old System vs GateKeeper
 
-| Capability | Old Manual System | SentryID Pro |
+| Capability | Old Manual System | GateKeeper |
 |---|---|---|
 | Gate verification | Paper-based, subjective | Digital pass with live clock |
 | Identity binding | Weak (name/ID only) | Auth user + registered serial + photo |
@@ -84,7 +84,7 @@ Protected admin-only panel includes:
 
 ## 📱 Mobile Installation (PWA-Style)
 
-SentryID is designed for phone-first operation at gate checkpoints. Install the app as a home-screen shortcut for near-native launch behavior and better session continuity.
+GateKeeper is designed for phone-first operation at gate checkpoints. Install the app as a home-screen shortcut for near-native launch behavior and better session continuity.
 
 ### Android (Chrome)
 1. Open the live app URL.
