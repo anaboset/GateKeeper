@@ -32,10 +32,11 @@ def inject_css() -> None:
                 margin-bottom: 0.5rem;
             }
             .serial-xl {
-                font-size: 2.2rem;
+                font-size: 3.4rem;
                 font-weight: 900;
                 color: #facc15;
                 letter-spacing: 0.02em;
+                line-height: 1.2;
             }
             .name-xl {
                 font-size: 1.7rem;

@@ -1,12 +1,10 @@
-import time
 from datetime import datetime
 
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 from app_core import (
-    PASS_DURATION_SECONDS,
     authenticated_client,
-    generate_verify_token,
     get_anon_client,
     get_device_record_by_user_id,
     get_public_photo_url,
@@ -83,7 +81,8 @@ def render_admin_registration() -> None:
 
 
 def render_student_pass() -> None:
-    st.subheader("My Exit Pass")
+    st.subheader("Active Exit Pass")
+    st_autorefresh(interval=1000, key="student_live_clock")
     client = authenticated_client(get_anon_client())
     user_id = str(st.session_state.get("user_id") or "")
     device = get_device_record_by_user_id(client, user_id)
@@ -91,50 +90,59 @@ def render_student_pass() -> None:
         st.warning("Your device is not registered yet. Contact admin.")
         return
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Generate 5-min pass", use_container_width=True):
-            try:
-                issue_pass(client, user_id)
-                st.success("Pass generated.")
-                st.rerun()
-            except Exception as exc:
-                st.error(f"Failed to generate pass: {exc}")
-    with col2:
-        stolen_now = bool(device.get("is_stolen", False))
-        button_text = "Mark Device Safe" if stolen_now else "Flag As Stolen"
-        if st.button(button_text, type="primary", use_container_width=True):
-            try:
-                client.table("student_devices").update({"is_stolen": not stolen_now}).eq(
-                    "user_id", user_id
-                ).execute()
-                st.rerun()
-            except Exception as exc:
-                st.error(f"Failed to toggle stolen status: {exc}")
+    stolen_now = bool(device.get("is_stolen", False))
+    if st.button("Mark Device Safe" if stolen_now else "Flag As Stolen", type="primary"):
+        try:
+            client.table("student_devices").update({"is_stolen": not stolen_now}).eq(
+                "user_id", user_id
+            ).execute()
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Failed to toggle stolen status: {exc}")
 
     device = get_device_record_by_user_id(client, user_id)
     if not is_pass_valid(device):
-        st.error("No active pass. Generate a pass before approaching the gate.")
+        try:
+            issue_pass(client, user_id)
+            device = get_device_record_by_user_id(client, user_id)
+        except Exception as exc:
+            st.error(f"Failed to activate pass: {exc}")
+            return
+
+    if not device:
+        st.error("Could not load your pass. Try refreshing.")
         return
 
-    pass_expires_at = str(device.get("pass_expires_at") or "")
-    expires_ts = int(time.time()) + PASS_DURATION_SECONDS
-    serial_number = str(device.get("serial_number") or "")
-    try:
-        token = generate_verify_token(user_id, serial_number, expires_ts)
-    except ValueError as exc:
-        st.error(str(exc))
+    if bool(device.get("is_stolen", False)):
+        st.markdown(
+            """
+            <div class="flash-red">
+                <div class="flash-red-text">STOLEN DEVICE - ALERT SECURITY</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         return
-    verify_url = f"{st.session_state.base_url}/verify?token={token}"
-    st.code(verify_url, language="text")
-    st.caption("Encode this URL into the gate QR code for this active pass.")
 
     photo_url = get_public_photo_url(client, str(device.get("profile_image_path") or ""))
+    st.markdown('<div class="pass-card">', unsafe_allow_html=True)
     if photo_url:
         st.image(photo_url, caption="Student Photo", use_container_width=True)
-    st.markdown(f"**Name:** {device.get('full_name', 'Unknown')}")
-    st.markdown(f"**Serial:** {serial_number}")
-    st.markdown(f"**Pass Expires At:** {pass_expires_at}")
+
+    student_name = str(device.get("full_name") or "Unknown Student")
+    department = str(device.get("department") or "Unknown Department")
+    serial_number = str(device.get("serial_number") or "NO SERIAL")
+    pass_expires_at = str(device.get("pass_expires_at") or "")
+
+    st.markdown(f'<div class="name-xl">{student_name}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="name-xl">{department}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="serial-xl">{serial_number}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="clock">LIVE TIME: {datetime.now().strftime("%H:%M:%S")}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(f'<div class="expiry">PASS EXPIRES: {pass_expires_at}</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def main() -> None:
@@ -155,7 +163,8 @@ def main() -> None:
         st.markdown('<div class="title-xl">Admin Control Panel</div>', unsafe_allow_html=True)
         render_admin_registration()
     else:
-        st.markdown('<div class="title-xl">Student Dashboard</div>', unsafe_allow_html=True)
+        st.markdown('<div class="title-xl">Gate Exit Verification</div>', unsafe_allow_html=True)
+        st.caption("Gate QR should point to this app URL. Landing here shows your live pass.")
         render_student_pass()
 
     st.caption(f"Local Time: {datetime.now().strftime('%H:%M:%S')}")
