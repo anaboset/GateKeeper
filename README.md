@@ -1,4 +1,4 @@
-# GateKeeper: Smart Campus Asset Protection
+# 🛡️ GateKeeper: Smart Campus Asset Protection
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.streamlit.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -17,6 +17,8 @@ In the past week alone, multiple high-value asset (PCs) have been stolen from st
 * **Visual Verification:** Displays the student's photo and the device's **Serial Number** in high-contrast, large fonts for easy guard inspection.
 * **Anti-Fraud Logic:** Includes a live ticking clock and "Daily Secret Colors" to prevent the use of static screenshots.
 * **The Kill-Switch:** Students can mark a device as "Stolen" in the app. If that device is scanned at any gate, the screen flashes a high-visibility alarm to alert the guard immediately.
+
+![Stolen Status](https://img.shields.io/badge/STOLEN_ALARM-ACTIVE-red?style=for-the-badge&logo=opsgenie)
 
 ---
 
@@ -44,20 +46,11 @@ In the past week alone, multiple high-value asset (PCs) have been stolen from st
 ## ⚙️ Installation & Setup
 
 ### 1. Database Setup (Supabase)
-Run the following SQL in your Supabase SQL Editor to initialize the schema:
-```sql
-CREATE TABLE devices (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  owner_id UUID REFERENCES auth.users,
-  full_name TEXT,
-  dept TEXT,
-  laptop_model TEXT,
-  serial_number TEXT UNIQUE,
-  photo_url TEXT,
-  is_stolen BOOLEAN DEFAULT false,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
+The database schema is pre-configured to handle user profiles, device registration, and theft-flagging logic.
+* Go to your [Supabase Dashboard](https://supabase.com).
+* Open the **SQL Editor**.
+* Copy the contents of [`supabase_schema.sql`](./supabase_schema.sql) and paste them into a new query.
+* Run the query to initialize the tables and security policies.
 
 ### 2. Local Development
 ```bash
