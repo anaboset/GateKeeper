@@ -21,11 +21,29 @@ create table if not exists public.student_devices (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.exit_logs (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references auth.users(id) on delete cascade,
+  student_name text not null,
+  laptop_serial text not null,
+  ip_address text,
+  timestamp timestamptz not null default now()
+);
+
 create index if not exists idx_student_devices_serial_number
   on public.student_devices(serial_number);
 
 create index if not exists idx_student_devices_user_id
   on public.student_devices(user_id);
+
+create index if not exists idx_exit_logs_student_id
+  on public.exit_logs(student_id);
+
+create index if not exists idx_exit_logs_laptop_serial
+  on public.exit_logs(laptop_serial);
+
+create index if not exists idx_exit_logs_timestamp
+  on public.exit_logs(timestamp desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -82,6 +100,7 @@ for each row execute function public.enforce_student_update_scope();
 
 -- Row Level Security
 alter table public.student_devices enable row level security;
+alter table public.exit_logs enable row level security;
 
 -- Students can only read their own records
 drop policy if exists "students_select_own_device" on public.student_devices;
@@ -117,6 +136,14 @@ for update
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- Exit log visibility (admin only when using authenticated client)
+drop policy if exists "admin_select_exit_logs" on public.exit_logs;
+create policy "admin_select_exit_logs"
+on public.exit_logs
+for select
+to authenticated
+using (lower(auth.jwt() ->> 'email') = 'admin@campus.edu');
 
 -- Storage bucket for profile images
 insert into storage.buckets (id, name, public)

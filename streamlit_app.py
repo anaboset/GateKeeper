@@ -1,4 +1,7 @@
-from datetime import datetime
+import csv
+import io
+from datetime import date, datetime, time, timezone
+from typing import Any
 
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
@@ -81,6 +84,108 @@ def render_admin_registration() -> None:
         st.error(f"Failed to save registration: {exc}")
 
 
+def get_request_ip() -> str:
+    headers = getattr(st.context, "headers", {}) or {}
+    if not isinstance(headers, dict):
+        return "unknown"
+    forwarded_for = headers.get("x-forwarded-for")
+    if isinstance(forwarded_for, str) and forwarded_for.strip():
+        return forwarded_for.split(",")[0].strip()
+    real_ip = headers.get("x-real-ip")
+    if isinstance(real_ip, str) and real_ip.strip():
+        return real_ip.strip()
+    return "unknown"
+
+
+def log_exit_once_per_session(device: dict) -> None:
+    user_id = str(st.session_state.get("user_id") or "")
+    pass_expires_at = str(device.get("pass_expires_at") or "")
+    session_log_key = f"{user_id}:{pass_expires_at}"
+    if st.session_state.get("last_logged_exit_key") == session_log_key:
+        return
+
+    service_client = get_service_client()
+    payload = {
+        "student_id": user_id,
+        "student_name": str(device.get("full_name") or "Unknown Student"),
+        "laptop_serial": str(device.get("serial_number") or "NO SERIAL"),
+        "ip_address": get_request_ip(),
+    }
+    try:
+        service_client.table("exit_logs").insert(payload).execute()
+        st.session_state["last_logged_exit_key"] = session_log_key
+    except Exception:
+        # Silent failure by design; logging should not block gate flow.
+        pass
+
+
+def to_csv_bytes(rows: list[Any]) -> bytes:
+    output = io.StringIO()
+    fieldnames = ["student_name", "laptop_serial", "ip_address", "timestamp"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(
+            {
+                "student_name": row.get("student_name", ""),
+                "laptop_serial": row.get("laptop_serial", ""),
+                "ip_address": row.get("ip_address", ""),
+                "timestamp": row.get("timestamp", ""),
+            }
+        )
+    return output.getvalue().encode("utf-8")
+
+
+def render_admin_forensics() -> None:
+    st.subheader("Admin Forensics Dashboard")
+    service_client = get_service_client()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", value=date.today())
+        start_time = st.time_input("Start Time", value=time(hour=0, minute=0))
+    with col2:
+        end_date = st.date_input("End Date", value=date.today())
+        end_time = st.time_input("End Time", value=time(hour=23, minute=59))
+
+    serial_query = st.text_input("Search by Serial Number", placeholder="e.g. BCAJW2451V")
+
+    start_dt = datetime.combine(start_date, start_time).replace(tzinfo=timezone.utc)
+    end_dt = datetime.combine(end_date, end_time).replace(tzinfo=timezone.utc)
+    if end_dt < start_dt:
+        st.error("End time must be after start time.")
+        return
+
+    query = (
+        service_client.table("exit_logs")
+        .select("student_name,laptop_serial,ip_address,timestamp")
+        .gte("timestamp", start_dt.isoformat())
+        .lte("timestamp", end_dt.isoformat())
+        .order("timestamp", desc=True)
+        .limit(50)
+    )
+
+    serial_value = serial_query.strip()
+    if serial_value:
+        query = query.ilike("laptop_serial", f"%{serial_value}%")
+
+    rows = query.execute().data or []
+    rows_data = rows if isinstance(rows, list) else []
+
+    st.markdown("**Live Feed (latest 50 exits)**")
+    st.dataframe(rows_data, use_container_width=True)
+
+    csv_bytes = to_csv_bytes(rows_data)
+    now_label = datetime.now().strftime("%Y%m%d_%H%M%S")
+    st.download_button(
+        "Export Filtered Logs (CSV)",
+        data=csv_bytes,
+        file_name=f"exit_logs_{now_label}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+
 def render_student_pass() -> None:
     st.subheader("Active Exit Pass")
     st_autorefresh(interval=1000, key="student_live_clock")
@@ -125,6 +230,8 @@ def render_student_pass() -> None:
         )
         return
 
+    log_exit_once_per_session(device)
+
     photo_url = get_public_photo_url(client, str(device.get("profile_image_path") or ""))
     st.markdown('<div class="pass-card">', unsafe_allow_html=True)
     if photo_url:
@@ -143,6 +250,7 @@ def render_student_pass() -> None:
         unsafe_allow_html=True,
     )
     st.markdown(f'<div class="expiry">PASS EXPIRES: {pass_expires_at}</div>', unsafe_allow_html=True)
+    st.caption("Security Notice: This exit is being digitally logged for campus safety.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -163,7 +271,11 @@ def main() -> None:
 
     if is_admin():
         st.markdown('<div class="title-xl">Admin Control Panel</div>', unsafe_allow_html=True)
-        render_admin_registration()
+        admin_tab1, admin_tab2 = st.tabs(["Student Registration", "Exit Forensics"])
+        with admin_tab1:
+            render_admin_registration()
+        with admin_tab2:
+            render_admin_forensics()
     else:
         st.markdown('<div class="title-xl">Gate Exit Verification</div>', unsafe_allow_html=True)
         st.caption("Gate QR should point to this app URL. Landing here shows your live pass.")
