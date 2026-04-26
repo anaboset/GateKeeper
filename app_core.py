@@ -5,9 +5,10 @@ import json
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import extra_streamlit_components as stx  # type: ignore[reportMissingImports]
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import Client, create_client
@@ -99,13 +100,79 @@ def set_page(page_title: str) -> None:
 def init_state() -> None:
     defaults = {
         "access_token": None,
+        "refresh_token": None,
         "user_id": None,
         "email": None,
         "base_url": os.getenv("APP_BASE_URL", "http://localhost:8501"),
+        "auth_restored_from_cookie": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+
+def get_cookie_manager() -> stx.CookieManager:
+    manager = st.session_state.get("cookie_manager")
+    if manager is None:
+        manager = stx.CookieManager()
+        st.session_state["cookie_manager"] = manager
+    return manager
+
+
+def _cookie_expiry(days: int = 30) -> datetime:
+    return datetime.utcnow() + timedelta(days=days)
+
+
+def persist_auth_cookies() -> None:
+    manager = get_cookie_manager()
+    access_token = st.session_state.get("access_token")
+    refresh_token = st.session_state.get("refresh_token")
+    user_id = st.session_state.get("user_id")
+    email = st.session_state.get("email")
+    expires_at = _cookie_expiry(30)
+
+    if isinstance(access_token, str) and access_token:
+        manager.set("gk_access_token", access_token, expires_at=expires_at)
+    if isinstance(refresh_token, str) and refresh_token:
+        manager.set("gk_refresh_token", refresh_token, expires_at=expires_at)
+    if isinstance(user_id, str) and user_id:
+        manager.set("gk_user_id", user_id, expires_at=expires_at)
+    if isinstance(email, str) and email:
+        manager.set("gk_email", email, expires_at=expires_at)
+
+
+def clear_auth_cookies() -> None:
+    manager = get_cookie_manager()
+    manager.delete("gk_access_token")
+    manager.delete("gk_refresh_token")
+    manager.delete("gk_user_id")
+    manager.delete("gk_email")
+
+
+def restore_auth_from_cookies() -> None:
+    if st.session_state.get("auth_restored_from_cookie"):
+        return
+
+    manager = get_cookie_manager()
+    access_token = manager.get("gk_access_token")
+    refresh_token = manager.get("gk_refresh_token")
+    user_id = manager.get("gk_user_id")
+    email = manager.get("gk_email")
+
+    if (
+        isinstance(access_token, str)
+        and access_token
+        and isinstance(refresh_token, str)
+        and refresh_token
+        and isinstance(user_id, str)
+        and user_id
+    ):
+        st.session_state["access_token"] = access_token
+        st.session_state["refresh_token"] = refresh_token
+        st.session_state["user_id"] = user_id
+        st.session_state["email"] = email if isinstance(email, str) else None
+
+    st.session_state["auth_restored_from_cookie"] = True
 
 
 def get_anon_client() -> Client:
@@ -128,8 +195,9 @@ def get_service_client() -> Client:
 
 def authenticated_client(client: Client) -> Client:
     token = st.session_state.get("access_token")
-    if token:
-        client.auth.set_session(access_token=token, refresh_token="")
+    refresh_token = st.session_state.get("refresh_token")
+    if isinstance(token, str) and token and isinstance(refresh_token, str) and refresh_token:
+        client.auth.set_session(access_token=token, refresh_token=refresh_token)
     return client
 
 
@@ -139,16 +207,20 @@ def sign_in(client: Client, email: str, password: str) -> None:
         st.error("Login failed.")
         return
     st.session_state.access_token = response.session.access_token
+    st.session_state.refresh_token = response.session.refresh_token
     st.session_state.user_id = response.user.id
     st.session_state.email = response.user.email
+    persist_auth_cookies()
     st.rerun()
 
 
 def sign_out(client: Client) -> None:
     client.auth.sign_out()
     st.session_state.access_token = None
+    st.session_state.refresh_token = None
     st.session_state.user_id = None
     st.session_state.email = None
+    clear_auth_cookies()
     st.rerun()
 
 

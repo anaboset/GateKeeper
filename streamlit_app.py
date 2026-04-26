@@ -14,6 +14,7 @@ from app_core import (
     is_admin,
     is_pass_valid,
     issue_pass,
+    restore_auth_from_cookies,
     set_page,
     sign_in,
     sign_out,
@@ -149,6 +150,7 @@ def main() -> None:
     set_page("GateKeeper")
     inject_css()
     init_state()
+    restore_auth_from_cookies()
 
     if not st.session_state.get("user_id"):
         render_auth()

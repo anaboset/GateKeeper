@@ -3,3 +3,4 @@ supabase>=2.5.1
 python-dotenv>=1.0.1
 streamlit-autorefresh>=1.0.1
 Pillow>=10.3.0
+extra-streamlit-components>=0.1.71
