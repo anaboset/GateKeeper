@@ -23,6 +23,12 @@ def inject_css() -> None:
     st.markdown(
         """
         <style>
+            [data-testid="stAppViewBlockContainer"] > div:first-child {
+                opacity: 1 !important;
+            }
+            .stApp [data-testid="stVerticalBlock"] > div {
+                opacity: 1 !important;
+            }
             .main, .stApp, [data-testid="stAppViewContainer"] {
                 background: #0b1220;
                 color: #f8fafc;
