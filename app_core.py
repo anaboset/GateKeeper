@@ -120,7 +120,7 @@ def init_state() -> None:
 def get_cookie_manager() -> stx.CookieManager:
     manager = st.session_state.get("cookie_manager")
     if manager is None:
-        manager = stx.CookieManager()
+        manager = stx.CookieManager(key='gk_cookie_manager')
         st.session_state["cookie_manager"] = manager
     return manager
 

@@ -191,12 +191,8 @@ def render_student_pass() -> None:
     st_autorefresh(interval=1000, key="student_live_clock")
     client = authenticated_client(get_anon_client())
     user_id = str(st.session_state.get("user_id") or "")
-    device = get_device_record_by_user_id(client, user_id)
-    if not device:
-        st.warning("Your device is not registered yet. Contact admin.")
-        return
 
-    # Live database read: never rely on session state for stolen status.
+    # Live database read for stolen status at the very beginning
     try:
         status = (
             client.table("student_devices")
@@ -211,14 +207,6 @@ def render_student_pass() -> None:
 
     status_data = status.data if isinstance(status.data, dict) else {}
     is_stolen_live = bool(status_data.get("is_stolen", False))
-
-    if st.button("Flag As Stolen", type="primary"):
-        try:
-            client.table("student_devices").update({"is_stolen": True}).eq("user_id", user_id).execute()
-            st.success("Device flagged as stolen.")
-            st.rerun()
-        except Exception as exc:
-            st.error(f"Failed to flag stolen: {exc}")
 
     if is_stolen_live:
         st.markdown(
@@ -262,7 +250,20 @@ def render_student_pass() -> None:
                 st.error(f"Failed to restore device: {exc}")
         return
 
+    # Not stolen, proceed with normal pass logic
     device = get_device_record_by_user_id(client, user_id)
+    if not device:
+        st.warning("Your device is not registered yet. Contact admin.")
+        return
+
+    if st.button("Flag As Stolen", type="primary"):
+        try:
+            client.table("student_devices").update({"is_stolen": True}).eq("user_id", user_id).execute()
+            st.success("Device flagged as stolen.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Failed to flag stolen: {exc}")
+
     if not is_pass_valid(device):
         try:
             issue_pass(client, user_id)
