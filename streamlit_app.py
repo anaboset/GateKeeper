@@ -30,9 +30,9 @@ def render_auth() -> None:
     st.markdown('<div class="title-xl">GateKeeper Login</div>', unsafe_allow_html=True)
     st.caption("No self-signup. Accounts are created by system admin.")
     with st.form("auth_form", clear_on_submit=False):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        submit = st.form_submit_button("Login")
+        email = st.text_input("Email", key="auth_email")
+        password = st.text_input("Password", type="password", key="auth_password")
+        submit = st.form_submit_button("Login", key="auth_login_button")
     if submit:
         client = get_anon_client()
         try:
@@ -47,14 +47,16 @@ def render_admin_registration() -> None:
     service_client = get_service_client()
 
     with st.form("admin_registration_form"):
-        student_user_id = st.text_input("Student Auth User ID (UUID)")
-        full_name = st.text_input("Full Name")
-        department = st.text_input("Department")
-        student_id = st.text_input("Student ID")
-        laptop_brand = st.text_input("Laptop Brand")
-        serial_number = st.text_input("Serial Number")
-        profile_photo = st.file_uploader("Profile Picture", type=["png", "jpg", "jpeg", "webp"])
-        save = st.form_submit_button("Save Registration")
+        student_user_id = st.text_input("Student Auth User ID (UUID)", key="admin_student_user_id")
+        full_name = st.text_input("Full Name", key="admin_full_name")
+        department = st.text_input("Department", key="admin_department")
+        student_id = st.text_input("Student ID", key="admin_student_id")
+        laptop_brand = st.text_input("Laptop Brand", key="admin_laptop_brand")
+        serial_number = st.text_input("Serial Number", key="admin_serial_number")
+        profile_photo = st.file_uploader(
+            "Profile Picture", type=["png", "jpg", "jpeg", "webp"], key="admin_profile_photo"
+        )
+        save = st.form_submit_button("Save Registration", key="admin_save_registration")
 
     if not save:
         return
@@ -241,7 +243,7 @@ def render_student_pass() -> None:
             """,
             unsafe_allow_html=True,
         )
-        if st.button("I found my device", use_container_width=True):
+        if st.button("I found my device", key="restore_device_button", use_container_width=True):
             try:
                 client.table("student_devices").update({"is_stolen": False}).eq("user_id", user_id).execute()
                 st.success("Device status restored to safe.")
@@ -256,7 +258,7 @@ def render_student_pass() -> None:
         st.warning("Your device is not registered yet. Contact admin.")
         return
 
-    if st.button("Flag As Stolen", type="primary"):
+    if st.button("Flag As Stolen", key="flag_as_stolen_button", type="primary"):
         try:
             client.table("student_devices").update({"is_stolen": True}).eq("user_id", user_id).execute()
             st.success("Device flagged as stolen.")
@@ -312,7 +314,7 @@ def main() -> None:
 
     client = authenticated_client(get_anon_client())
     st.sidebar.write(f"Logged in as: {st.session_state.get('email')}")
-    if st.sidebar.button("Logout"):
+    if st.sidebar.button("Logout", key="sidebar_logout_button"):
         sign_out(client)
 
     if is_admin():
