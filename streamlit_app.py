@@ -196,15 +196,71 @@ def render_student_pass() -> None:
         st.warning("Your device is not registered yet. Contact admin.")
         return
 
-    stolen_now = bool(device.get("is_stolen", False))
-    if st.button("Mark Device Safe" if stolen_now else "Flag As Stolen", type="primary"):
+    # Live database read: never rely on session state for stolen status.
+    try:
+        status = (
+            client.table("student_devices")
+            .select("is_stolen")
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+    except Exception as exc:
+        st.error(f"Failed to read device status: {exc}")
+        return
+
+    status_data = status.data if isinstance(status.data, dict) else {}
+    is_stolen_live = bool(status_data.get("is_stolen", False))
+
+    if st.button("Flag As Stolen", type="primary"):
         try:
-            client.table("student_devices").update({"is_stolen": not stolen_now}).eq(
-                "user_id", user_id
-            ).execute()
+            client.table("student_devices").update({"is_stolen": True}).eq("user_id", user_id).execute()
+            st.success("Device flagged as stolen.")
             st.rerun()
         except Exception as exc:
-            st.error(f"Failed to toggle stolen status: {exc}")
+            st.error(f"Failed to flag stolen: {exc}")
+
+    if is_stolen_live:
+        st.markdown(
+            """
+            <style>
+                .stApp, [data-testid="stAppViewContainer"] {
+                    animation: stolenFlashBg 1s infinite !important;
+                }
+                @keyframes stolenFlashBg {
+                    0% { background: #ff0000; }
+                    50% { background: #5b0000; }
+                    100% { background: #ff0000; }
+                }
+                .stolen-banner {
+                    margin-top: 1rem;
+                    padding: 1.2rem;
+                    border: 4px solid #ffffff;
+                    border-radius: 14px;
+                    text-align: center;
+                    background: rgba(0, 0, 0, 0.45);
+                }
+                .stolen-text {
+                    color: #ffffff;
+                    font-size: 2rem;
+                    font-weight: 900;
+                    line-height: 1.3;
+                }
+            </style>
+            <div class="stolen-banner">
+                <div class="stolen-text">🛑 STOLEN DEVICE DETECTED - ALERT SECURITY</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("I found my device", use_container_width=True):
+            try:
+                client.table("student_devices").update({"is_stolen": False}).eq("user_id", user_id).execute()
+                st.success("Device status restored to safe.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Failed to restore device: {exc}")
+        return
 
     device = get_device_record_by_user_id(client, user_id)
     if not is_pass_valid(device):
@@ -217,17 +273,6 @@ def render_student_pass() -> None:
 
     if not device:
         st.error("Could not load your pass. Try refreshing.")
-        return
-
-    if bool(device.get("is_stolen", False)):
-        st.markdown(
-            """
-            <div class="flash-red">
-                <div class="flash-red-text">STOLEN DEVICE - ALERT SECURITY</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
         return
 
     log_exit_once_per_session(device)
