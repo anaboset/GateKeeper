@@ -109,7 +109,7 @@ def init_state() -> None:
         "refresh_token": None,
         "user_id": None,
         "email": None,
-        "base_url": os.getenv("APP_BASE_URL", "http://localhost:8501"),
+        "base_url": os.getenv("APP_BASE_URL", "https://keepstudent.streamlit.app/"),
         "auth_restored_from_cookie": False,
     }
     for key, value in defaults.items():
