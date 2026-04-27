@@ -138,21 +138,21 @@ def persist_auth_cookies() -> None:
     expires_at = _cookie_expiry(30)
 
     if isinstance(access_token, str) and access_token:
-        manager.set("gk_access_token", access_token, expires_at=expires_at)
+        manager.set("gk_access_token", access_token, key="gk_access_token_set", expires_at=expires_at)
     if isinstance(refresh_token, str) and refresh_token:
-        manager.set("gk_refresh_token", refresh_token, expires_at=expires_at)
+        manager.set("gk_refresh_token", refresh_token, key="gk_refresh_token_set", expires_at=expires_at)
     if isinstance(user_id, str) and user_id:
-        manager.set("gk_user_id", user_id, expires_at=expires_at)
+        manager.set("gk_user_id", user_id, key="gk_user_id_set", expires_at=expires_at)
     if isinstance(email, str) and email:
-        manager.set("gk_email", email, expires_at=expires_at)
+        manager.set("gk_email", email, key="gk_email_set", expires_at=expires_at)
 
 
 def clear_auth_cookies() -> None:
     manager = get_cookie_manager()
-    manager.delete("gk_access_token")
-    manager.delete("gk_refresh_token")
-    manager.delete("gk_user_id")
-    manager.delete("gk_email")
+    manager.delete("gk_access_token", key="gk_access_token_delete")
+    manager.delete("gk_refresh_token", key="gk_refresh_token_delete")
+    manager.delete("gk_user_id", key="gk_user_id_delete")
+    manager.delete("gk_email", key="gk_email_delete")
 
 
 def restore_auth_from_cookies() -> None:
